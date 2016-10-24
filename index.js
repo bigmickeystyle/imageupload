@@ -6,6 +6,8 @@ const https = require('https');
 const fs = require('fs');
 const url = require('url');
 
+const maxLen = 5000000;
+
 var app = express();
 
 var diskStorage = multer.diskStorage({
@@ -57,22 +59,40 @@ app.post('/uploadurl', function(req, resp) {
     var pathArray = parsedUrl.path.split('/');
     var fileName = pathArray[pathArray.length - 1];
     var file = './uploads/' +  Date.now() + '_' + Math.floor(Math.random() * 99999999) + '_' + fileName;
+    var options = {
+        hostname: parsedUrl.host,
+        path: parsedUrl.path
+    };
     if (parsedUrl.protocol == 'http:'){
-        var options = {
-            hostname: parsedUrl.host,
-            path: parsedUrl.path
-        };
-        var request = http.request(options, (res) => {
-
+        var request = http.request(options, callback);
+        request.end();
+    }
+    else if (parsedUrl.protocol == 'https:'){
+        var requestS = https.request(options, callback);
+        requestS.end();
+    }
+    function callback(res){
+        console.log(res.headers['content-type']);
+        if (res.headers['content-type'].split('/')[0] == 'image' && res.headers['content-length'] < maxLen) {
             res.pipe(fs.createWriteStream(file));
+            var size;
+            res.on('data', (data) => {
+                size += data.length;
+                if (size > maxLen){
+                    console.log("invalid file, maximum file size permitted is " + maxLen);
+                }
+            });
             res.on('end', () => {
                 resp.json({
                     success: true,
                     file: file
                 });
             });
-        });
-        request.end();
+        }
+        else {
+            console.log("invalid file");
+            console.log("length " + res.headers['content-length']);
+        }
     }
 });
 
